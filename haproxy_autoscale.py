@@ -73,7 +73,7 @@ def file_contents(filename=None, content=None):
         f = open(filename, 'r')
         text = f.read()
         f.close()
-    except:
+    except IOError:
         text = None
 
     return text
