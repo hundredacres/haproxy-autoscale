@@ -1,22 +1,19 @@
-import boto.ec2.connection
-from boto.ec2.connection import EC2Connection
-from boto.ec2.securitygroup import SecurityGroup
-from boto.ec2.instance import Instance
-from mako.template import Template
+#!/usr/bin/python
+
 import argparse
-import os
 import subprocess
 import logging
-from haproxy_autoscale import get_running_instances, file_contents, generate_haproxy_config, steal_elastic_ip
 import urllib2
+from haproxy_autoscale import list_as_instances, file_contents, generate_haproxy_config, steal_elastic_ip
 
 
 def main():
     # Parse up the command line arguments.
     parser = argparse.ArgumentParser(description='Update haproxy to use all instances running in a security group.')
-    parser.add_argument('--security-group', required=True, nargs='+', type=str)
+    parser.add_argument('--autoscaling-group', required=True, nargs='+', type=str)
     parser.add_argument('--access-key', required=True)
     parser.add_argument('--secret-key', required=True)
+    parser.add_argument('--region', default="us-east-1", help="AWS region name")
     parser.add_argument('--output', default='haproxy.cfg',
                         help='Defaults to haproxy.cfg if not specified.')
     parser.add_argument('--template', default='templates/haproxy.tpl')
@@ -32,32 +29,28 @@ def main():
 
     # Fetch a list of all the instances in these security groups.
     instances = {}
-    for security_group in args.security_group:
-        logging.info('Getting instances for %s.' % security_group)
-        instances[security_group] = get_running_instances(access_key=args.access_key,
-                                                          secret_key=args.secret_key,
-                                                          security_group=security_group)
+    for autoscaling_group in args.autoscaling_group:
+        logging.info('Getting instances for %s.' % autoscaling_group)
+        instances[autoscaling_group] = list_as_instances(args.access_key, args.secret_key, args.region,
+                                                         autoscaling_group)
     # Generate the new config from the template.
     logging.info('Generating configuration for haproxy.')
-    new_configuration = generate_haproxy_config(template=args.template,
-                                                instances=instances)
+    new_configuration = generate_haproxy_config(args.template, instances)
     
     # See if this new config is different. If it is then restart using it.
     # Otherwise just delete the temporary file and do nothing.
     logging.info('Comparing to existing configuration.')
-    old_configuration = file_contents(filename=args.output)
+    old_configuration = file_contents(args.output)
     if new_configuration != old_configuration:
         logging.info('Existing configuration is outdated.')
         
         # Overwite the existing config file.
         logging.info('Writing new configuration.')
-        file_contents(filename=args.output,
-                      content=generate_haproxy_config(template=args.template,
-                                                      instances=instances    ))
+        file_contents(args.output, generate_haproxy_config(args.template, instances))
         
         # Get PID if haproxy is already running.
         logging.info('Fetching PID from %s.' % args.pid)
-        pid = file_contents(filename=args.pid)
+        pid = file_contents(args.pid)
         
         # Restart haproxy.
         logging.info('Restarting haproxy.')
@@ -78,12 +71,9 @@ def main():
             except:
                 # Assign the EIP to self.
                 logging.warn('Health check failed. Assigning %s to self.' % args.eip)
-                steal_elastic_ip(access_key=args.access_key,
-                                 secret_key=args.secret_key,
-                                 ip=args.eip                )
+                steal_elastic_ip(args.access_key, args.secret_key, args.eip)
     except:
         pass
-
 
 
 if __name__ == '__main__':

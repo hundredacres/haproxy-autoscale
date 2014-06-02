@@ -42,8 +42,8 @@ will be available to use.
 haproxy-autoscale was designed to be run from the load balancer itself as a cron
 job. Ideally it would be run every minute.
 
-    update-haproxy.py [-h] --security-group SECURITY_GROUP
-                      [SECURITY_GROUP ...] --access-key ACCESS_KEY
+    update-haproxy.py [-h] --autoscaling-group AUTOSCALING_GROUP
+                      [AUTOSCALING_GROUP ...] --access-key ACCESS_KEY
                       --secret-key SECRET_KEY [--output OUTPUT]
                       [--template TEMPLATE] [--haproxy HAPROXY] [--pid PID]
                       [--eip EIP] [--health-check-url HEALTH_CHECK_URL]
@@ -52,7 +52,7 @@ job. Ideally it would be run every minute.
 
     optional arguments:
       -h, --help            show this help message and exit
-      --security-group SECURITY_GROUP [SECURITY_GROUP ...]
+      --autoscaling-group AUTOSCALING_GROUP [AUTOSCALING_GROUP ...]
       --access-key ACCESS_KEY
       --secret-key SECRET_KEY
       --output OUTPUT       Defaults to haproxy.cfg if not specified.
@@ -68,7 +68,7 @@ job. Ideally it would be run every minute.
 
 Example:
 
-    /usr/bin/python update-haproxy.py --access-key='SOMETHING' --secret-key='SoMeThInGeLsE' --security-group='webheads' 'tomcat-servers'
+    /usr/bin/python update-haproxy.py --access-key SOMETHING --secret-key SoMeThInGeLsE --autoscaling-group cfn-webserver-product-dev-01
 
 ## Changelog ##
 * v0.1 - Initial release.
@@ -76,3 +76,5 @@ Example:
        **not** compatible with previous versions' templates.
 * v0.3 - Added support for all regions.
 * v0.4 - Added accessor class for autobackend generation (see tests/data/autobackends_example.tpl for example usage)
+* v.5  - Remove security group for autoscaling group.
+       - Pip-8 cleaning
