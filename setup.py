@@ -9,4 +9,6 @@ setup(name='haproxy-autoscale',
       author_email='mark@markcaudill.me',
       url='https://github.com/markcaudill/haproxy-update',
       install_requires=['boto>=2.0', 'mako>=0.5.0', 'argparse>=1.2.1'],
-      license='MIT'                                                          )
+      license='MIT',
+      py_modules=['haproxy_autoscale'],
+      scripts=['update-haproxy.py'])
