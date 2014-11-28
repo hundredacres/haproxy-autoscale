@@ -28,7 +28,7 @@ def main():
                         help='The URL to check. Assigns EIP to self if health check fails.')
     args = parser.parse_args()
 
-    # aws config file
+    # haproxy-autoscale config file
     config_fh = open(args.config, "ro")
     config = configparser.RawConfigParser()
     config.read_file(config_fh)
