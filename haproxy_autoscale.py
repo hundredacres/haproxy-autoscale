@@ -1,68 +1,68 @@
-from boto.ec2 import EC2Connection, get_region
 import logging
-import subprocess
 import urllib2
+import boto.ec2
+import boto.ec2.autoscale
 from mako.template import Template
 
-__version__ = '0.4.1'
+
+__version__ = '0.5'
+
+
+def init_aws_ec2_conn(access_key, secret_key, region):
+    """Initialize AWS ec2 connection"""
+
+    return boto.ec2.connect_to_region(region, aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+
+
+def init_aws_as_conn(access_key, secret_key, region):
+    """Initialize AWS AS group connection"""
+
+    return boto.ec2.autoscale.connect_to_region(region, aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+
 
 def get_self_instance_id():
-    '''
-    Get this instance's id.
-    '''
+    """Get this instance's id."""
+
     logging.debug('get_self_instance_id()')
     response = urllib2.urlopen('http://169.254.169.254/1.0/meta-data/instance-id')
     instance_id = response.read()
     return instance_id
 
 
-def steal_elastic_ip(access_key=None, secret_key=None, ip=None):
-    '''
-    Assign an elastic IP to this instance.
-    '''
+def list_as_instances(access_key, secret_key, region, autoscaling_group):
+    """Return a list of instances of an autoscaling group"""
+
+    aws_as = init_aws_as_conn(access_key, secret_key, region)
+    aws_ec2 = init_aws_ec2_conn(access_key, secret_key, region)
+    autoscaling_instances = []
+
+    vm = aws_as.get_all_groups([autoscaling_group])
+    autoscaling_instances_id = [j.instance_id for i in vm for j in i.instances]
+
+    for instance_id in autoscaling_instances_id:
+        vm = boto.ec2.instance.Instance(aws_ec2)
+        vm.id = instance_id
+        vm.update()
+        autoscaling_instances.append(vm)
+
+    return autoscaling_instances
+
+
+def steal_elastic_ip(access_key, secret_key, region, ip):
+    """Assign an elastic IP to this instance."""
+
+    aws_ec2 = init_aws_ec2_conn(access_key, secret_key, region)
+
     logging.debug('steal_elastic_ip()')
     instance_id = get_self_instance_id()
-    conn = EC2Connection(aws_access_key_id=access_key,
-                         aws_secret_access_key=secret_key)
-    conn.associate_address(instance_id=instance_id, public_ip=ip)
-
-
-def get_running_instances(access_key=None, secret_key=None, security_group=None, region=None):
-    '''
-    Get all running instances. Only within a security group if specified.
-    '''
-    logging.debug('get_running_instances()')
-
-    instances_all_regions_list = []
-    if region is None:
-        conn = EC2Connection(aws_access_key_id=access_key,
-                             aws_secret_access_key=secret_key)
-        ec2_region_list = conn.get_all_regions()
-    else:
-        ec2_region_list = [get_region(region)]
-
-    for region in ec2_region_list:
-        conn = EC2Connection(aws_access_key_id=access_key,
-                             aws_secret_access_key=secret_key,
-                             region=region)
-
-        running_instances = []
-        for s in conn.get_all_security_groups():
-            if s.name == security_group:
-                running_instances.extend([i for i in s.instances() if i.state == 'running'])
-
-        if running_instances:
-            for instance in running_instances:
-                instances_all_regions_list.append(instance)
-
-    return instances_all_regions_list
+    aws_ec2.associate_address(instance_id, ip)
 
 
 def file_contents(filename=None, content=None):
-    '''
+    """
     Just return the contents of a file as a string or write if content
     is specified. Returns the contents of the filename either way.
-    '''
+    """
     logging.debug('file_contents()')
     if content:
         f = open(filename, 'w')
@@ -73,156 +73,13 @@ def file_contents(filename=None, content=None):
         f = open(filename, 'r')
         text = f.read()
         f.close()
-    except:
+    except IOError:
         text = None
 
     return text
 
 
 def generate_haproxy_config(template=None, instances=None):
-    '''
-    Generate an haproxy configuration based on the template and instances list.
-    '''
+    """Generate an haproxy configuration based on the template and instances list."""
+
     return Template(filename=template).render(instances=instances)
-
-def restart_haproxy(args):
-    '''
-    Restart haproxy, either by an Ubuntu service or standalone binary
-    '''
-    logging.info('Restarting haproxy.')
-    
-    if args.haproxy:
-        # Get PID if haproxy is already running.
-        logging.debug('Fetching PID from %s.' % args.pid)
-        pid = file_contents(filename=args.pid)    
-        command = '''%s -p %s -f %s -sf %s''' % (args.haproxy, args.pid, args.output, pid or '')
-    
-    else:
-        command = "service %s restart" % args.servicename
-    
-    logging.debug('Executing: %s' % command)
-    subprocess.call(command, shell=True)    
-
-
-"""
-this class is used for the tests functionality
-"""
-class Backends():
-    # instances without these tags will be excluded from backends
-    required_keys = ['AppName',
-                     'AppPort']
-
-    backend_templates = {'default': {'mode':'http',
-                                     'option':'httpchk',
-                                     'balance':'roundrobin'},
-                         'ssl-backend': {'mode':'https',
-                                         'option':'httpchk',
-                                         'balance':'roundrobin'}}
-    comment = ("# Autogenerated with haproxy_autoscale version %s"
-               %__version__)
-
-
-    def get_acls(self, instances_dict, tabindent, domain, prefixes=None):
-        """Generate neatly printed cfg-worthy backends for haproxy.
-
-            Args:
-                instances_dict: haproxy_autoscale.get_running_instances return.
-                tabindent: Int, number of spaces to prepend hanging config lines.
-                domain: Str, TLD to serve all backends from.
-                prefixes: List, strings to prepend to acls and backends.
-            Returns:
-                return_comment: Str, version comment information.
-        """
-
-
-        # flatten all security group lookups into single instance list
-        self.all_instances = []
-        for instance_list in instances_dict.values():
-            for instance in instance_list:
-                self.all_instances.append(instance)
-
-        self.all_backends = []
-        self.included_instances = []
-        self.excluded_instances = []
-
-        if type(prefixes) is list:
-            for prefix in prefixes:
-                self.required_keys.append(prefix)
-        else:
-            prefixes = []
-
-        for instance in self.all_instances:
-            instance.missing_tags = []
-            for key in self.required_keys:
-                if instance.tags.has_key(key) is False:
-                    instance.missing_tags.append(key)
-            if len(instance.missing_tags) is 0:
-                self.included_instances.append(instance)
-                app_name = instance.tags['AppName']
-                prefix_str = ''
-                if len(prefixes) > 0:
-                    for prefix in prefixes:
-                        prefix_str = prefix_str + "%s-" %instance.tags[prefix]
-                
-                backend_name = "%s%s" %(prefix_str, app_name)
-                instance.tags['backend'] = backend_name
-                if backend_name not in self.all_backends:
-                    self.all_backends.append(backend_name)
-            else:
-                self.excluded_instances.append(instance)
-
-        # generate acls and redirects
-        tabindent_str = (' ' * tabindent)
-        return_str = "\n%s%s" %(tabindent_str, self.comment)
-        for backend in self.all_backends:
-            return_str = return_str + ("\n%sacl %s hdr(host) -i %s.%s"
-                                       %(tabindent_str, 
-                                         backend,
-                                         backend,
-                                         domain))
-            return_str = return_str + ("\n%suse_backend %s if %s"
-                                       %(tabindent_str,
-                                         backend,
-                                         backend))
-        return return_str
-
-
-    def generate(self, template_name, tabindent, cookie=True):
-        """Iterate over all backend objects and generate default backend.
-        
-        Args:
-            template_name: Str, a haproxy_autoscale.Backends.backend_templates.
-            tabindent: Int, number of spaces to prepend hanging config lines.
-            cookie: Bool, False to disabled sticky sessions.
-        Returns:
-            return_str: Str, formatted haproxy backend text block.
-        """
-
-        template = self.backend_templates.get(template_name)
-        tabindent_str = (' ' * tabindent)
-        return_str = ''
-
-        # generate backend cfg from template
-        for backend in self.all_backends:
-            return_str = return_str + ("\n\n%s\nbackend %s"
-                                       %(self.comment, backend))
-            for key,value in template.iteritems():
-                return_str = return_str + "\n%s%s %s" %(tabindent_str,
-                                                        key, value)
-            if cookie is True:
-                return_str = return_str + ("\n%scookie SERVERID insert"
-                                           " indirect nocache" %tabindent_str)
-            return_str = return_str + "\n"
-
-            # populate backend with instances
-            for instance in self.included_instances:
-                if instance.tags['backend'] == backend:
-                    return_str = return_str + ("\n%sserver %s %s:%s"
-                                               %(tabindent_str,
-                                                 instance.id,
-                                                 instance.private_dns_name,
-                                                 instance.tags['AppPort']))
-                    if cookie is True:
-                        return_str = return_str + " cookie %s" %(instance.id)
-
-        return return_str

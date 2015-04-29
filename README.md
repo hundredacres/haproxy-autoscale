@@ -42,9 +42,8 @@ will be available to use.
 haproxy-autoscale was designed to be run from the load balancer itself as a cron
 job. Ideally it would be run every minute.
 
-    update-haproxy.py [-h] --security-group SECURITY_GROUP
-                      [SECURITY_GROUP ...] --access-key ACCESS_KEY
-                      --secret-key SECRET_KEY [--output OUTPUT]
+    update-haproxy.py [-h] --config CONFIG --autoscaling-group AUTOSCALING_GROUP
+                      [AUTOSCALING_GROUP ...] [--output OUTPUT]
                       [--template TEMPLATE] [--haproxy HAPROXY] [--pid PID]
                       [--eip EIP] [--health-check-url HEALTH_CHECK_URL]
 
@@ -52,9 +51,7 @@ job. Ideally it would be run every minute.
 
     optional arguments:
       -h, --help            show this help message and exit
-      --security-group SECURITY_GROUP [SECURITY_GROUP ...]
-      --access-key ACCESS_KEY
-      --secret-key SECRET_KEY
+      --autoscaling-group AUTOSCALING_GROUP [AUTOSCALING_GROUP ...]
       --output OUTPUT       Defaults to haproxy.cfg if not specified.
       --template TEMPLATE
       --haproxy HAPROXY     The haproxy binary to call. Defaults to haproxy if not
@@ -68,11 +65,15 @@ job. Ideally it would be run every minute.
 
 Example:
 
-    /usr/bin/python update-haproxy.py --access-key='SOMETHING' --secret-key='SoMeThInGeLsE' --security-group='webheads' 'tomcat-servers'
+    /usr/bin/python update-haproxy.py --config SOMECONFIGPATH --autoscaling-group cfn-webserver-product-dev-01
 
 ## Changelog ##
-* v0.1 - Initial release.
-* v0.2 - Added ability to specify multiple security groups. This version is
+* v0.1 	- Initial release.
+* v0.2 	- Added ability to specify multiple security groups. This version is
        **not** compatible with previous versions' templates.
-* v0.3 - Added support for all regions.
-* v0.4 - Added accessor class for autobackend generation (see tests/data/autobackends_example.tpl for example usage)
+* v0.3 	- Added support for all regions.
+* v0.4 	- Added accessor class for autobackend generation (see tests/data/autobackends_example.tpl for example usage)
+* v0.5 	- Remove security group for autoscaling group.
+* v0.6 	- Update setup.py to include configparser
+	- Update README.md
+       - Pip-8 cleaning
